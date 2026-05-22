@@ -10,19 +10,22 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score
+import json
+import requests
 
-# ── Maroon palette ────────────────────────────────────────────────────────────
-M1  = "#800000"
-M2  = "#a52a2a"
-M3  = "#c0392b"
-M4  = "#d4a5a5"
-M5  = "#f9f0f0"
-M6  = "#4a0000"
-ACC = "#e8c4c4"
-NEG = "#c0392b"
-POS = "#6d4c41"
+# palette
+M1  = "#5B0E2D" 
+M2  = "#8C1C3A" 
+M3  = "#C84B63"  
+M4  = "#E7A7B3" 
+M5  = "#FAF4F5"  
+M6  = "#2E0717"   
 
-# ── Page config ───────────────────────────────────────────────────────────────
+ACC = "#D9B8C4"   
+NEG = "#B23A48" 
+POS = "#6B8E6E"  
+
+# page config
 st.set_page_config(
     page_title="Iowa Liquor Sales Dashboard",
     page_icon="🥃",
@@ -30,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
+# custom css
 st.markdown(f"""
 <style>
     .stApp {{ background-color: #fdf5f5; }}
@@ -92,7 +95,7 @@ def fig_base(fig, height=400):
     return fig
 
 
-# ── Data loader ───────────────────────────────────────────────────────────────
+# data loader
 @st.cache_data
 def load_data():
     df = pd.read_csv("iowa_liquor_clean_2026.csv", parse_dates=["date"])
@@ -102,7 +105,7 @@ def load_data():
                     "Jul","Aug","Sep","Oct","Nov","Dec"],
         ordered=True,
     )
-    # Pastikan kolom turunan dari notebook tersedia
+    
     if "margin_per_bottle" not in df.columns:
         df["margin_per_bottle"] = (df["state_bottle_retail"] - df["state_bottle_cost"]).round(2)
     if "margin_pct" not in df.columns:
@@ -117,7 +120,7 @@ def load_data():
 
 df_all = load_data()
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# sidebar
 with st.sidebar:
     st.markdown(f"## 🥃 Iowa Liquor Sales")
     st.markdown("**Dashboard 2026**")
@@ -143,7 +146,7 @@ with st.sidebar:
     st.divider()
     st.caption("Data: BigQuery Iowa Liquor Sales 2026 (757,888 transaksi asli)")
 
-# ── Apply filters ─────────────────────────────────────────────────────────────
+# filters
 df = df_all[
     df_all["month"].isin(selected_months) &
     df_all["city"].isin(selected_cities) &
@@ -154,15 +157,14 @@ if df.empty:
     st.warning("Tidak ada data yang sesuai dengan filter.")
     st.stop()
 
-# ── Header ────────────────────────────────────────────────────────────────────
+# header
 st.markdown(f"<h1 style='color:{M6}'>🥃 Iowa Liquor Sales Dashboard</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='color:{M2}'><b>Analisis Penjualan Minuman Keras Iowa — 2026</b> | Data: BigQuery Public Dataset</p>",
             unsafe_allow_html=True)
 st.divider()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 — KPI CARDS
-# ══════════════════════════════════════════════════════════════════════════════
+
+# SECTION 1 KPI CARDS
 st.markdown('<div class="section-title">📊 Key Performance Indicators</div>', unsafe_allow_html=True)
 
 SCALE         = 757888 / len(df_all)
@@ -190,9 +192,8 @@ metric_card(col4, "Rata-rata per Transaksi", f"${avg_sale:.2f}",          CARD_C
 metric_card(col5, "Rata-rata Margin",        f"{avg_margin:.1f}%",        CARD_COLORS[4])
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — TREN PENJUALAN
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 2 TREN PENJUALAN
+
 st.markdown('<div class="section-title">📈 Tren Penjualan Bulanan</div>', unsafe_allow_html=True)
 
 df_monthly = (
@@ -206,7 +207,7 @@ df_monthly["cumulative"]           = df_monthly["total_sales"].cumsum()
 df_monthly["total_sales_scaled"]   = df_monthly["total_sales"] * SCALE
 df_monthly["total_bottles_scaled"] = df_monthly["total_bottles"] * SCALE
 
-# Trend line (linear regression) — sesuai notebook
+
 x_idx = np.arange(len(df_monthly))
 if len(x_idx) >= 2:
     slope, intercept_lr, _, _, _ = stats.linregress(x_idx, df_monthly["total_sales_scaled"] / 1e6)
@@ -228,7 +229,6 @@ fig_trend.add_trace(go.Scatter(
     fill="tozeroy", fillcolor="rgba(128,0,0,0.10)", name="Total Sales",
 ), row=1, col=1)
 
-# Tambah trend line — sesuai notebook
 if len(x_idx) >= 2:
     fig_trend.add_trace(go.Scatter(
         x=df_monthly["month_name"], y=trend_vals,
@@ -271,9 +271,7 @@ fig_trend.update_xaxes(showgrid=True, gridcolor=GRID_CLR)
 fig_trend.update_yaxes(showgrid=True, gridcolor=GRID_CLR)
 st.plotly_chart(fig_trend, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2B — ANALISIS KUARTAL & HARI (dari notebook: feature engineering)
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 2B ANALISIS KUARTAL & HARI
 st.markdown('<div class="section-title">📅 Analisis Kuartal & Hari dalam Seminggu</div>', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
@@ -316,9 +314,7 @@ with c2:
                               xaxis_title="Hari", yaxis_title="Sales (Ribu USD)")
         st.plotly_chart(fig_dow, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — TOP KATEGORI
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 3 TOP KATEGORI
 st.markdown('<div class="section-title">🏷️ Analisis Kategori Produk</div>', unsafe_allow_html=True)
 
 df_cat = (
@@ -379,9 +375,18 @@ fig_avg.update_layout(xaxis_title="Avg Sales per Transaksi (USD)",
                       margin=dict(l=10,r=80,t=10,b=10))
 st.plotly_chart(fig_avg, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — GEOGRAFIS
-# ══════════════════════════════════════════════════════════════════════════════
+# LOAD IOWA GEOJSON
+@st.cache_data
+def load_iowa_geojson():
+    url = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    geojson = requests.get(url).json()
+    return geojson
+
+counties_geo = load_iowa_geojson()
+
+
+
+# SECTION 4 GEOGRAFIS
 st.markdown('<div class="section-title">🗺️ Analisis Geografis (Kota & Toko)</div>', unsafe_allow_html=True)
 
 df_city = (
@@ -398,6 +403,63 @@ df_store = (
     .reset_index().sort_values("total_revenue", ascending=False)
 )
 df_store["share_pct"] = df_store["total_revenue"] / df_store["total_revenue"].sum() * 100
+
+# ── MAP IOWA ────────────────────────────────────────────────────
+st.markdown("#### 🗺️ Peta Revenue per County di Iowa")
+
+if "county" in df.columns:
+
+    # mapping county → revenue
+    df_map = (
+        df.groupby("county")
+        .agg(total_sales=("sale_dollars", "sum"))
+        .reset_index()
+    )
+
+    # contoh FIPS Iowa (sementara manual beberapa dulu)
+    county_fips = {
+        "POLK": "19153",
+        "LINN": "19113",
+        "SCOTT": "19163",
+        "JOHNSON": "19103",
+        "BLACK HAWK": "19013",
+    }
+
+    df_map["county_upper"] = df_map["county"].str.upper()
+    df_map["fips"] = df_map["county_upper"].map(county_fips)
+
+    df_map = df_map.dropna(subset=["fips"])
+
+    fig_map = px.choropleth(
+        df_map,
+        geojson=counties_geo,
+        locations="fips",
+        color="total_sales",
+        color_continuous_scale=[
+            [0.0, M5],
+            [0.3, M4],
+            [0.6, M2],
+            [1.0, M6]
+        ],
+        scope="usa",
+        hover_name="county",
+        hover_data={"total_sales":":,.0f"},
+    )
+
+    fig_map.update_geos(
+        fitbounds="locations",
+        visible=False
+    )
+
+    fig_map.update_layout(
+        height=500,
+        margin=dict(l=0, r=0, t=30, b=0),
+        paper_bgcolor=PAPER_BG,
+        font=dict(color=FONT_CLR),
+        coloraxis_colorbar=dict(title="Revenue")
+    )
+
+    st.plotly_chart(fig_map, use_container_width=True)
 
 c1, c2 = st.columns(2)
 
