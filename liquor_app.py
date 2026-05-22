@@ -377,26 +377,8 @@ fig_avg.update_layout(xaxis_title="Avg Sales per Transaksi (USD)",
                       margin=dict(l=10,r=80,t=10,b=10))
 st.plotly_chart(fig_avg, use_container_width=True)
 
-# ── LOAD IOWA GEOJSON ───────────────────────────────────────────
-@st.cache_data
-def load_iowa_geojson():
-    url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/iowa-counties.geojson"
 
-    response = requests.get(url)
-
-    if response.status_code != 200:
-        st.error("Gagal mengambil GeoJSON Iowa.")
-        return None
-
-    return response.json()
-
-
-counties_geo = load_iowa_geojson()
-
-
-# ══════════════════════════════════════════════════════════════════════
 # SECTION 4 — GEOGRAFIS
-# ══════════════════════════════════════════════════════════════════════
 st.markdown(
     '<div class="section-title">🗺️ Analisis Geografis (Kota & Toko)</div>',
     unsafe_allow_html=True
@@ -430,92 +412,6 @@ df_store = (
 df_store["share_pct"] = (
     df_store["total_revenue"] / df_store["total_revenue"].sum() * 100
 )
-
-
-# ── CHOROPLETH MAP IOWA ────────────────────────────────────────
-st.markdown("#### 🗺️ Revenue per County di Iowa")
-
-if "county" in df.columns and counties_geo is not None:
-
-    df_map = (
-        df.groupby("county")
-        .agg(
-            total_sales=("sale_dollars", "sum"),
-            total_txn=("sale_dollars", "count"),
-            total_bottles=("bottles_sold", "sum"),
-        )
-        .reset_index()
-    )
-
-    # format nama county biar match geojson
-    df_map["county_name"] = (
-        df_map["county"]
-        .astype(str)
-        .str.replace(" COUNTY", "", regex=False)
-        .str.strip()
-        .str.title()
-    )
-
-    fig_map = px.choropleth(
-        df_map,
-        geojson=counties_geo,
-        locations="county_name",
-        featureidkey="properties.name",
-        color="total_sales",
-
-        hover_name="county_name",
-
-        hover_data={
-            "total_sales": ":,.0f",
-            "total_txn": ":,.0f",
-            "total_bottles": ":,.0f",
-        },
-
-        color_continuous_scale=[
-            [0.00, M5],
-            [0.25, M4],
-            [0.50, M3],
-            [0.75, M2],
-            [1.00, M6],
-        ],
-    )
-
-    fig_map.update_geos(
-        fitbounds="locations",
-        visible=False,
-        bgcolor="rgba(0,0,0,0)"
-    )
-
-    fig_map.update_layout(
-        height=650,
-
-        margin=dict(
-            l=0,
-            r=0,
-            t=30,
-            b=0
-        ),
-
-        paper_bgcolor=PAPER_BG,
-        plot_bgcolor=PLOT_BG,
-
-        font=dict(color=FONT_CLR),
-
-        geo=dict(
-            bgcolor="rgba(0,0,0,0)",
-            lakecolor="white",
-            landcolor="#fdf5f5",
-            subunitcolor="white",
-        ),
-
-        coloraxis_colorbar=dict(
-            title="Revenue",
-            tickprefix="$"
-        )
-    )
-
-    st.plotly_chart(fig_map, use_container_width=True)
-
 
 c1, c2 = st.columns(2)
 
