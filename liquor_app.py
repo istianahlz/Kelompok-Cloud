@@ -379,7 +379,7 @@ st.plotly_chart(fig_avg, use_container_width=True)
 # LOAD IOWA GEOJSON
 @st.cache_data
 def load_iowa_geojson():
-    url = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/iowa-counties.geojson"
     return requests.get(url).json()
 
 
@@ -452,19 +452,26 @@ if "county" in df.columns:
         .str.strip()
     )
 
-    # merge county → FIPS
-    df_map = df_map.merge(
-        iowa_fips[["county_clean", "fips"]],
-        on="county_clean",
-        how="left"
-    )
+    # merge county
+   df_map["county_clean"] = (
+    df_map["county"]
+    .astype(str)
+    .str.upper()
+    .str.replace(" COUNTY", "", regex=False)
+    .str.strip()
+)
+
+df_map["county_name"] = (
+    df_map["county_clean"]
+    .str.title()
+)
 
     fig_map = px.choropleth(
         df_map,
         geojson=counties_geo,
         locations="fips",
         color="total_sales",
-        featureidkey="id",
+        featureidkey="properties.name",
         scope="usa",
         hover_name="county",
         hover_data={
