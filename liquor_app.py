@@ -13,6 +13,7 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score
 import json
 import requests
 
+
 # palette
 M1  = "#5B0E2D" 
 M2  = "#8C1C3A" 
@@ -379,10 +380,35 @@ st.plotly_chart(fig_avg, use_container_width=True)
 @st.cache_data
 def load_iowa_geojson():
     url = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
-    geojson = requests.get(url).json()
-    return geojson
+    return requests.get(url).json()
+
+
+@st.cache_data
+def load_iowa_fips():
+    # county Iowa → FIPS
+    url = "https://raw.githubusercontent.com/kjhealy/fips-codes/master/state_and_county_fips_master.csv"
+    fips_df = pd.read_csv(url)
+
+    iowa_fips = (
+        fips_df[fips_df["state"] == "IA"]
+        [["name", "fips"]]
+        .copy()
+    )
+
+    iowa_fips["county_clean"] = (
+        iowa_fips["name"]
+        .str.upper()
+        .str.replace(" COUNTY", "", regex=False)
+        .str.strip()
+    )
+
+    iowa_fips["fips"] = iowa_fips["fips"].astype(str).str.zfill(5)
+
+    return iowa_fips
+
 
 counties_geo = load_iowa_geojson()
+iowa_fips = load_iowa_fips()
 
 
 
@@ -404,59 +430,74 @@ df_store = (
 )
 df_store["share_pct"] = df_store["total_revenue"] / df_store["total_revenue"].sum() * 100
 
-# ── MAP IOWA ────────────────────────────────────────────────────
-st.markdown("#### 🗺️ Peta Revenue per County di Iowa")
+# CHOROPLETH MAP IOWA
+st.markdown("#### 🗺️ Revenue per County di Iowa")
 
 if "county" in df.columns:
 
-    # mapping county → revenue
     df_map = (
         df.groupby("county")
-        .agg(total_sales=("sale_dollars", "sum"))
+        .agg(
+            total_sales=("sale_dollars", "sum"),
+            total_txn=("sale_dollars", "count"),
+            total_bottles=("bottles_sold", "sum"),
+        )
         .reset_index()
     )
 
-    # contoh FIPS Iowa (sementara manual beberapa dulu)
-    county_fips = {
-        "POLK": "19153",
-        "LINN": "19113",
-        "SCOTT": "19163",
-        "JOHNSON": "19103",
-        "BLACK HAWK": "19013",
-    }
+    df_map["county_clean"] = (
+        df_map["county"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
 
-    df_map["county_upper"] = df_map["county"].str.upper()
-    df_map["fips"] = df_map["county_upper"].map(county_fips)
-
-    df_map = df_map.dropna(subset=["fips"])
+    # merge county → FIPS
+    df_map = df_map.merge(
+        iowa_fips[["county_clean", "fips"]],
+        on="county_clean",
+        how="left"
+    )
 
     fig_map = px.choropleth(
         df_map,
         geojson=counties_geo,
         locations="fips",
         color="total_sales",
-        color_continuous_scale=[
-            [0.0, M5],
-            [0.3, M4],
-            [0.6, M2],
-            [1.0, M6]
-        ],
+        featureidkey="id",
         scope="usa",
         hover_name="county",
-        hover_data={"total_sales":":,.0f"},
+        hover_data={
+            "total_sales": ":,.0f",
+            "total_txn": ":,.0f",
+            "total_bottles": ":,.0f",
+            "fips": False,
+        },
+        color_continuous_scale=[
+            [0.00, M5],
+            [0.25, M4],
+            [0.50, M3],
+            [0.75, M2],
+            [1.00, M6],
+        ],
     )
 
     fig_map.update_geos(
         fitbounds="locations",
-        visible=False
+        visible=False,
+        bgcolor="rgba(0,0,0,0)"
     )
 
     fig_map.update_layout(
-        height=500,
-        margin=dict(l=0, r=0, t=30, b=0),
+        height=600,
+        margin=dict(l=0, r=0, t=40, b=0),
         paper_bgcolor=PAPER_BG,
+        plot_bgcolor=PLOT_BG,
         font=dict(color=FONT_CLR),
-        coloraxis_colorbar=dict(title="Revenue")
+        coloraxis_colorbar=dict(
+            title="Revenue",
+            tickprefix="$"
+        )
     )
 
     st.plotly_chart(fig_map, use_container_width=True)
@@ -493,9 +534,7 @@ with c2:
                                   margin=dict(l=10,r=110,t=40,b=10))
     st.plotly_chart(fig_store_chart, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — DISTRIBUSI & OUTLIER
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 5 DISTRIBUSI & OUTLIER
 st.markdown('<div class="section-title">📦 Distribusi & Analisis Outlier</div>', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
@@ -521,7 +560,7 @@ with c1:
     st.plotly_chart(fig_hist, use_container_width=True)
 
 with c2:
-    # Kolom numerik lengkap sesuai notebook
+    # Kolom numerik
     num_boxplot_cols = [c for c in ["sale_dollars","bottles_sold","state_bottle_retail",
                                      "volume_sold_liters","volume_sold_gallons",
                                      "state_bottle_cost","margin_pct","price_per_liter",
@@ -538,7 +577,7 @@ with c2:
     st.plotly_chart(fig_box, use_container_width=True)
 
 st.markdown("#### Deteksi Outlier — Metode IQR")
-# Kolom IQR sesuai notebook
+# Kolom IQR
 cols_iqr = [c for c in ["sale_dollars","bottles_sold","state_bottle_retail",
                           "volume_sold_liters","state_bottle_cost","margin_pct",
                           "price_per_liter","margin_per_bottle"]
@@ -555,7 +594,7 @@ for col in cols_iqr:
                      "Jml Outlier":n_out,"Persen (%)":round(n_out/len(df)*100,2)})
 st.dataframe(pd.DataFrame(iqr_rows), use_container_width=True, hide_index=True)
 
-# Distribusi percentile sesuai notebook
+# Distribusi percentile
 st.markdown("#### Distribusi Percentile (bottles_sold & sale_dollars)")
 c1, c2 = st.columns(2)
 with c1:
@@ -571,12 +610,11 @@ with c2:
         use_container_width=True
     )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 6 — KORELASI & REGRESI
-# ══════════════════════════════════════════════════════════════════════════════
+
+# SECTION 6 KORELASI & REGRESI
 st.markdown('<div class="section-title">🔗 Korelasi & Analisis Regresi</div>', unsafe_allow_html=True)
 
-# Kolom korelasi sesuai notebook
+# Kolom korelasi
 corr_cols = [c for c in ["sale_dollars","bottles_sold","state_bottle_retail",
                            "volume_sold_liters","state_bottle_cost","margin_pct",
                            "price_per_liter","margin_per_bottle"]
@@ -640,9 +678,7 @@ with c2:
     fig_sc.update_layout(xaxis_title=sc_x, yaxis_title=sc_y, showlegend=True)
     st.plotly_chart(fig_sc, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 7 — K-MEANS CLUSTERING (sesuai notebook)
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 7 K-MEANS CLUSTERING
 st.markdown('<div class="section-title">🤖 Machine Learning: K-Means Clustering</div>', unsafe_allow_html=True)
 
 FITUR_CLUSTERING = [c for c in [
@@ -810,9 +846,7 @@ with tab_km1:
 with tab_km2:
     run_kmeans_tab(X_city_scaled, df_city_agg, "Kota", FITUR_CITY, "city")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 8 — STATISTIK & DATA MENTAH
-# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 8 STATISTIK & DATA MENTAh
 st.markdown('<div class="section-title">📋 Statistik Deskriptif & Data Mentah</div>', unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊 Statistik Numerik", "🏷️ Statistik Kategorik", "🗃️ Data Mentah"])
@@ -844,7 +878,7 @@ with tab3:
     show_cols = st.multiselect("Pilih kolom", df.columns.tolist(), default=default_cols)
     st.dataframe(df[show_cols].head(max_rows), use_container_width=True, hide_index=True)
 
-# ── Footer ────────────────────────────────────────────────────────────────────
+# Footer
 st.divider()
 st.markdown(
     f"<center><small style='color:{M2}'>Iowa Liquor Sales Dashboard · "
