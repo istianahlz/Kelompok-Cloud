@@ -453,7 +453,7 @@ if "county" in df.columns:
     )
 
     # merge county
-   df_map["county_clean"] = (
+    df_map["county_clean"] = (
     df_map["county"]
     .astype(str)
     .str.upper()
