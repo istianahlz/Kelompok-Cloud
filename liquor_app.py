@@ -10,8 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score
-import json
-import requests
+
 
 
 # palette
@@ -376,64 +375,65 @@ fig_avg.update_layout(xaxis_title="Avg Sales per Transaksi (USD)",
                       margin=dict(l=10,r=80,t=10,b=10))
 st.plotly_chart(fig_avg, use_container_width=True)
 
-# LOAD IOWA GEOJSON
+# ── LOAD IOWA GEOJSON ───────────────────────────────────────────
 @st.cache_data
 def load_iowa_geojson():
     url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/iowa-counties.geojson"
-    return requests.get(url).json()
 
+    response = requests.get(url)
 
-@st.cache_data
-def load_iowa_fips():
-    # county Iowa → FIPS
-    url = "https://raw.githubusercontent.com/kjhealy/fips-codes/master/state_and_county_fips_master.csv"
-    fips_df = pd.read_csv(url)
+    if response.status_code != 200:
+        st.error("Gagal mengambil GeoJSON Iowa.")
+        return None
 
-    iowa_fips = (
-        fips_df[fips_df["state"] == "IA"]
-        [["name", "fips"]]
-        .copy()
-    )
-
-    iowa_fips["county_clean"] = (
-        iowa_fips["name"]
-        .str.upper()
-        .str.replace(" COUNTY", "", regex=False)
-        .str.strip()
-    )
-
-    iowa_fips["fips"] = iowa_fips["fips"].astype(str).str.zfill(5)
-
-    return iowa_fips
+    return response.json()
 
 
 counties_geo = load_iowa_geojson()
-iowa_fips = load_iowa_fips()
 
 
-
-# SECTION 4 GEOGRAFIS
-st.markdown('<div class="section-title">🗺️ Analisis Geografis (Kota & Toko)</div>', unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════
+# SECTION 4 — GEOGRAFIS
+# ══════════════════════════════════════════════════════════════════════
+st.markdown(
+    '<div class="section-title">🗺️ Analisis Geografis (Kota & Toko)</div>',
+    unsafe_allow_html=True
+)
 
 df_city = (
     df.groupby("city")
-    .agg(total_revenue=("sale_dollars","sum"), n_txn=("sale_dollars","count"),
-         avg_rev=("sale_dollars","mean"))
-    .reset_index().sort_values("total_revenue", ascending=False)
+    .agg(
+        total_revenue=("sale_dollars","sum"),
+        n_txn=("sale_dollars","count"),
+        avg_rev=("sale_dollars","mean")
+    )
+    .reset_index()
+    .sort_values("total_revenue", ascending=False)
 )
-df_city["share_pct"] = df_city["total_revenue"] / df_city["total_revenue"].sum() * 100
+
+df_city["share_pct"] = (
+    df_city["total_revenue"] / df_city["total_revenue"].sum() * 100
+)
 
 df_store = (
     df.groupby("store_name")
-    .agg(total_revenue=("sale_dollars","sum"), n_txn=("sale_dollars","count"))
-    .reset_index().sort_values("total_revenue", ascending=False)
+    .agg(
+        total_revenue=("sale_dollars","sum"),
+        n_txn=("sale_dollars","count")
+    )
+    .reset_index()
+    .sort_values("total_revenue", ascending=False)
 )
-df_store["share_pct"] = df_store["total_revenue"] / df_store["total_revenue"].sum() * 100
 
-# CHOROPLETH MAP IOWA
+df_store["share_pct"] = (
+    df_store["total_revenue"] / df_store["total_revenue"].sum() * 100
+)
+
+
+# ── CHOROPLETH MAP IOWA ────────────────────────────────────────
 st.markdown("#### 🗺️ Revenue per County di Iowa")
 
-if "county" in df.columns:
+if "county" in df.columns and counties_geo is not None:
 
     df_map = (
         df.groupby("county")
@@ -445,41 +445,30 @@ if "county" in df.columns:
         .reset_index()
     )
 
-    df_map["county_clean"] = (
+    # format nama county biar match geojson
+    df_map["county_name"] = (
         df_map["county"]
         .astype(str)
-        .str.upper()
+        .str.replace(" COUNTY", "", regex=False)
         .str.strip()
+        .str.title()
     )
 
-    # merge county
-    df_map["county_clean"] = (
-    df_map["county"]
-    .astype(str)
-    .str.upper()
-    .str.replace(" COUNTY", "", regex=False)
-    .str.strip()
-)
-
-df_map["county_name"] = (
-    df_map["county_clean"]
-    .str.title()
-)
-
-fig_map = px.choropleth(
+    fig_map = px.choropleth(
         df_map,
         geojson=counties_geo,
-        locations="fips",
-        color="total_sales",
+        locations="county_name",
         featureidkey="properties.name",
-        scope="usa",
-        hover_name="county",
+        color="total_sales",
+
+        hover_name="county_name",
+
         hover_data={
             "total_sales": ":,.0f",
             "total_txn": ":,.0f",
             "total_bottles": ":,.0f",
-            "fips": False,
         },
+
         color_continuous_scale=[
             [0.00, M5],
             [0.25, M4],
@@ -489,25 +478,42 @@ fig_map = px.choropleth(
         ],
     )
 
-fig_map.update_geos(
+    fig_map.update_geos(
         fitbounds="locations",
         visible=False,
         bgcolor="rgba(0,0,0,0)"
     )
 
-fig_map.update_layout(
-        height=600,
-        margin=dict(l=0, r=0, t=40, b=0),
+    fig_map.update_layout(
+        height=650,
+
+        margin=dict(
+            l=0,
+            r=0,
+            t=30,
+            b=0
+        ),
+
         paper_bgcolor=PAPER_BG,
         plot_bgcolor=PLOT_BG,
+
         font=dict(color=FONT_CLR),
+
+        geo=dict(
+            bgcolor="rgba(0,0,0,0)",
+            lakecolor="white",
+            landcolor="#fdf5f5",
+            subunitcolor="white",
+        ),
+
         coloraxis_colorbar=dict(
             title="Revenue",
             tickprefix="$"
         )
     )
 
-st.plotly_chart(fig_map, use_container_width=True)
+    st.plotly_chart(fig_map, use_container_width=True)
+
 
 c1, c2 = st.columns(2)
 
