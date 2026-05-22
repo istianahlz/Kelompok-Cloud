@@ -489,13 +489,13 @@ fig_map = px.choropleth(
         ],
     )
 
-    fig_map.update_geos(
+fig_map.update_geos(
         fitbounds="locations",
         visible=False,
         bgcolor="rgba(0,0,0,0)"
     )
 
-    fig_map.update_layout(
+fig_map.update_layout(
         height=600,
         margin=dict(l=0, r=0, t=40, b=0),
         paper_bgcolor=PAPER_BG,
@@ -507,7 +507,7 @@ fig_map = px.choropleth(
         )
     )
 
-    st.plotly_chart(fig_map, use_container_width=True)
+st.plotly_chart(fig_map, use_container_width=True)
 
 c1, c2 = st.columns(2)
 
