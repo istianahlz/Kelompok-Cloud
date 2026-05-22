@@ -466,7 +466,7 @@ df_map["county_name"] = (
     .str.title()
 )
 
-    fig_map = px.choropleth(
+fig_map = px.choropleth(
         df_map,
         geojson=counties_geo,
         locations="fips",
